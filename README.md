@@ -20,16 +20,3 @@ npm install
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-## Running Tests
-
-To run the automated tests:
-
-```bash
-npx hardhat test
-```
-
-Or directly with Mocha:
-
-```bash
-npx mocha --require hardhat/register test/VeriDrip.test.js
-```
