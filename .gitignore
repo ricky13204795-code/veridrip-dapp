@@ -29,3 +29,11 @@
 
 # Snapshot cheatcodes output
 /snapshots
+
+# Virtual environment
+venv/
+.virtualenv/
+
+# Environment variables
+.env
+.env.enc
