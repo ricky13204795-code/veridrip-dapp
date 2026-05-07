@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VeriDrip – Cold Chain Integrity Protocol</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input, button { padding: 8px 12px; margin: 5px; font-size: 14px; }
+        button { background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0052a3; }
+        .connected { color: green; }
+        .disconnected { color: red; }
+        .error { color: red; font-size: 12px; margin-top: 5px; }
+        code { background: #eee; padding: 2px 4px; border-radius: 3px; }
+        pre { background: #eee; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>VeriDrip – AI‑Verified Cold Chain</h1>
+    <div class="card">
+        <h2>Wallet</h2>
+        <button id="connectBtn">Connect MetaMask</button>
+        <p>Status: <span id="walletStatus" class="disconnected">Disconnected</span></p>
+        <p>Address: <span id="accountAddress">-</span></p>
+        <p>DRIP Balance: <span id="tokenBalance">-</span></p>
+        <p>ETH Balance: <span id="ethBalance">-</span></p>
+        <div id="errorMsg" class="error"></div>
+    </div>
+
+    <div class="card">
+        <h2>Register Shipment</h2>
+        <input type="text" id="regId" placeholder="Shipment ID (string, e.g., shipment_001)" size="30">
+        <input type="text" id="ipfsHash" placeholder="IPFS data hash (e.g., Qm...)" size="30">
+        <input type="number" id="insuranceAmount" placeholder="Insurance amount (DRIP)" value="0">
+        <button id="registerBtn">Register</button>
+        <p id="regResult"></p>
+    </div>
+
+    <div class="card">
+        <h2>Check Shipment Status</h2>
+        <input type="text" id="checkId" placeholder="Shipment ID (bytes32 hex, with 0x)" size="66">
+        <button id="checkBtn">Check</button>
+        <div id="shipmentDetails"></div>
+    </div>
+
+    <div class="card">
+        <h2>Claim Insurance</h2>
+        <input type="text" id="claimId" placeholder="Shipment ID (bytes32 hex, with 0x)" size="66">
+        <button id="claimBtn">Claim</button>
+        <p id="claimResult"></p>
+    </div>
+
+    <div class="card">
+        <h2>Contract Info</h2>
+        <p>VeriDrip: <code>0x22C362d61063ba51bd3a1c269b8B0E65dFC2BB11</code></p>
+        <p>VeriDripToken: <code>0x55880776237BA00dFb52a019B82749681370FD76</code></p>
+        <p>Network: chainlab testnet (RPC: https://testnet.chainlab.fun)</p>
+        <p><strong>Note:</strong> You need testnet ETH for gas and DRIP tokens for insurance.</p>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+    <script>
+        const VERIDRIP_ADDRESS = "0x22C362d61063ba51bd3a1c269b8B0E65dFC2BB11";
+        const TOKEN_ADDRESS = "0x55880776237BA00dFb52a019B82749681370FD76";
+
+        const veridripAbi = [
+            "function registerShipment(bytes32 shipmentId, string calldata ipfsDataHash, uint256 insuranceAmount) external",
+            "function shipments(bytes32) view returns (address shipper, uint64 departureTime, uint8 status, uint256 insuranceAmount, address tokenUsed, uint64 lastUpdated, bytes32 breachProof, string ipfsDataHash)",
+            "function claimInsurance(bytes32 shipmentId) external"
+        ];
+
+        const tokenAbi = [
+            "function balanceOf(address) view returns (uint256)",
+            "function approve(address spender, uint256 amount) returns (bool)",
+            "function allowance(address owner, address spender) view returns (uint256)"
+        ];
+
+        let provider, signer, veridripContract, tokenContract, userAddress;
+        const errorDiv = document.getElementById("errorMsg");
+
+        // Helper to detect MetaMask more robustly
+        function isMetaMaskInstalled() {
+            return typeof window.ethereum !== 'undefined' || typeof window.web3 !== 'undefined';
+        }
+
+        async function connectWallet() {
+            errorDiv.innerText = "";
+
+            if (!isMetaMaskInstalled()) {
+                errorDiv.innerText = "❌ MetaMask not detected. Please install MetaMask extension and refresh the page.";
+                return;
+            }
+
+            // Ensure we use the provider from window.ethereum
+            if (!window.ethereum) {
+                errorDiv.innerText = "❌ MetaMask is not available. Please make sure it's enabled and unlocked.";
+                return;
+            }
+
+            try {
+                provider = new ethers.BrowserProvider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                signer = await provider.getSigner();
+                userAddress = await signer.getAddress();
+
+                const network = await provider.getNetwork();
+                const chainId = Number(network.chainId);
+                if (chainId !== 31337) {
+                    errorDiv.innerText = `⚠️ Wrong network (chainId ${chainId}). Please switch to ChainLab Testnet (chainId 31337) in MetaMask.`;
+                    return;
+                }
+
+                veridripContract = new ethers.Contract(VERIDRIP_ADDRESS, veridripAbi, signer);
+                tokenContract = new ethers.Contract(TOKEN_ADDRESS, tokenAbi, signer);
+
+                document.getElementById("walletStatus").innerText = "Connected";
+                document.getElementById("walletStatus").className = "connected";
+                document.getElementById("accountAddress").innerText = userAddress;
+
+                const ethBalance = await provider.getBalance(userAddress);
+                const tokenBalance = await tokenContract.balanceOf(userAddress);
+                document.getElementById("ethBalance").innerText = ethers.formatEther(ethBalance) + " ETH";
+                document.getElementById("tokenBalance").innerText = ethers.formatEther(tokenBalance) + " DRIP";
+
+                errorDiv.innerText = "";
+            } catch (err) {
+                console.error(err);
+                errorDiv.innerText = "Connection failed: " + err.message;
+            }
+        }
+
+        async function registerShipment() {
+            if (!signer) { errorDiv.innerText = "Connect wallet first"; return; }
+            const idStr = document.getElementById("regId").value.trim();
+            const ipfs = document.getElementById("ipfsHash").value.trim();
+            let amount = document.getElementById("insuranceAmount").value;
+            if (!idStr) { alert("Enter shipment ID string"); return; }
+            if (!ipfs) { alert("Enter IPFS hash"); return; }
+            amount = ethers.parseEther(amount.toString());
+            const shipmentId = ethers.id(idStr);
+            try {
+                if (amount > 0n) {
+                    const allowance = await tokenContract.allowance(userAddress, VERIDRIP_ADDRESS);
+                    if (allowance < amount) {
+                        const approveTx = await tokenContract.approve(VERIDRIP_ADDRESS, amount);
+                        await approveTx.wait();
+                    }
+                }
+                const tx = await veridripContract.registerShipment(shipmentId, ipfs, amount);
+                document.getElementById("regResult").innerHTML = `Transaction sent: ${tx.hash}<br>Waiting...`;
+                await tx.wait();
+                document.getElementById("regResult").innerHTML = `✅ Shipment registered! ID: <code>${shipmentId}</code>`;
+            } catch (err) {
+                document.getElementById("regResult").innerText = "Error: " + (err.reason || err.message);
+            }
+        }
+
+        async function checkShipment() {
+            const idHex = document.getElementById("checkId").value.trim();
+            if (!idHex) { alert("Enter shipment ID hex (with 0x)"); return; }
+            try {
+                const shipment = await veridripContract.shipments(idHex);
+                const statusMap = {0: "None", 1: "Pending", 2: "Warning", 3: "Breached"};
+                const departureDate = new Date(Number(shipment.departureTime) * 1000).toLocaleString();
+                const html = `
+                    <p><strong>Shipper:</strong> ${shipment.shipper}</p>
+                    <p><strong>Departure time:</strong> ${departureDate}</p>
+                    <p><strong>Status:</strong> ${statusMap[shipment.status] || shipment.status}</p>
+                    <p><strong>Insurance amount:</strong> ${ethers.formatEther(shipment.insuranceAmount)} DRIP</p>
+                    <p><strong>Token used:</strong> ${shipment.tokenUsed === ethers.ZeroAddress ? "ETH (native)" : shipment.tokenUsed}</p>
+                    <p><strong>Breach proof:</strong> <code>${shipment.breachProof}</code></p>
+                    <p><strong>IPFS data hash:</strong> ${shipment.ipfsDataHash}</p>
+                `;
+                document.getElementById("shipmentDetails").innerHTML = html;
+            } catch (err) {
+                document.getElementById("shipmentDetails").innerHTML = `<p>Error: ${err.message}</p>`;
+            }
+        }
+
+        async function claimInsurance() {
+            if (!signer) { errorDiv.innerText = "Connect wallet first"; return; }
+            const idHex = document.getElementById("claimId").value.trim();
+            if (!idHex) { alert("Enter shipment ID hex"); return; }
+            try {
+                const tx = await veridripContract.claimInsurance(idHex);
+                document.getElementById("claimResult").innerText = "Transaction sent: " + tx.hash;
+                await tx.wait();
+                document.getElementById("claimResult").innerText = "✅ Insurance claimed successfully!";
+            } catch (err) {
+                document.getElementById("claimResult").innerText = "Error: " + (err.reason || err.message);
+            }
+        }
+
+        document.getElementById("connectBtn").addEventListener("click", connectWallet);
+        document.getElementById("registerBtn").addEventListener("click", registerShipment);
+        document.getElementById("checkBtn").addEventListener("click", checkShipment);
+        document.getElementById("claimBtn").addEventListener("click", claimInsurance);
+    </script>
+</body>
+</html>
