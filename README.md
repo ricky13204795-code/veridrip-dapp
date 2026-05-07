@@ -12,7 +12,7 @@ cat > README.md << 'EOF'
 - Python 3.11+
 - MetaMask (configured to ChainLab testnet: RPC `https://testnet.chainlab.fun`, chainId `31337`)
 
-## Installation
+## Installation and Compile and Testing steps
 
 ```bash
 git clone https://github.com/ricky13204795-code/veridrip-dapp.git
