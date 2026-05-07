@@ -1,3 +1,4 @@
+cat > README.md << 'EOF'
 # VeriDrip – AI‑Verified Cold Chain Integrity Protocol
 
 ## Smart Contracts (ChainLab Testnet)
