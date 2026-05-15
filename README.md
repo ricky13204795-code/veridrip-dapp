@@ -49,6 +49,9 @@ python3 -m http.server 8080
 rm test/Counter.ts
 npx hardhat test
 
+## HTML
+http://localhost:8080/index.html
+
 ## ManualTest
 ```bash
 npx hardhat console --network chainlab
